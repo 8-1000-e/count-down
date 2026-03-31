@@ -4,9 +4,9 @@ import * as fs from "fs";
 import * as path from "path";
 
 // ---- CONFIG ----
-const INIT_BID = 0.05 * LAMPORTS_PER_SOL;       // 0.05 SOL initial pot
-const TICKET_PRICE = 0.01 * LAMPORTS_PER_SOL;   // 0.01 SOL per ticket
-const DURATION_SECONDS = 300;                     // 5 min countdown
+const INIT_BID = 3 * LAMPORTS_PER_SOL;           // 3 SOL initial pot
+const TICKET_PRICE = 0.1 * LAMPORTS_PER_SOL;    // 0.1 SOL per ticket
+const DURATION_SECONDS = 2 * 24 * 60 * 60;       // 2 days
 // ----------------
 
 async function main() {

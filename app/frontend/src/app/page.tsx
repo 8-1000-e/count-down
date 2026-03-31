@@ -22,33 +22,64 @@ interface CountDownAccount {
   status: { active: Record<string, never> } | { claimed: Record<string, never> };
 }
 
-function formatTime(seconds: number): { h: string; m: string; s: string } {
-  if (seconds <= 0) return { h: "00", m: "00", s: "00" };
-  const h = Math.floor(seconds / 3600);
+interface AuctionListItem {
+  pubkey: PublicKey;
+  data: CountDownAccount;
+  vaultBalance: number;
+  timeLeft: number;
+}
+
+function formatTime(seconds: number): { d: string; h: string; m: string; s: string } {
+  if (seconds <= 0) return { d: "0", h: "00", m: "00", s: "00" };
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;
   return {
+    d: d.toString(),
     h: h.toString().padStart(2, "0"),
     m: m.toString().padStart(2, "0"),
     s: s.toString().padStart(2, "0"),
   };
 }
 
+function formatTimeShort(seconds: number): string {
+  if (seconds <= 0) return "ENDED";
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m ${s}s`;
+}
+
 function shortenAddress(addr: string): string {
   return addr.slice(0, 4) + "..." + addr.slice(-4);
+}
+
+function getReadProgram(connection: import("@solana/web3.js").Connection) {
+  const dummyWallet = {
+    publicKey: PublicKey.default,
+    signTransaction: async <T,>(t: T) => t,
+    signAllTransactions: async <T,>(t: T) => t,
+  };
+  const readProvider = new AnchorProvider(connection, dummyWallet as never, { commitment: "confirmed" });
+  return new Program(idl as never, readProvider);
 }
 
 export default function Home() {
   const { connection } = useConnection();
   const wallet = useWallet();
 
+  const [auctions, setAuctions] = useState<AuctionListItem[]>([]);
+  const [loadingList, setLoadingList] = useState(true);
   const [countdownData, setCountdownData] = useState<CountDownAccount | null>(null);
   const [countdownPubkey, setCountdownPubkey] = useState<PublicKey | null>(null);
   const [vaultBalance, setVaultBalance] = useState<number>(0);
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [txStatus, setTxStatus] = useState<string>("");
-  const [searchKey, setSearchKey] = useState<string>("");
 
   const provider = useMemo(() => {
     if (!wallet.publicKey || !wallet.signTransaction || !wallet.signAllTransactions) return null;
@@ -62,16 +93,76 @@ export default function Home() {
     return new Program(idl as never, provider);
   }, [provider]);
 
+  // Fetch all countdown accounts
+  const fetchAllAuctions = useCallback(async () => {
+    try {
+      const readProgram = getReadProgram(connection);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const allAccounts = await (readProgram.account as any).countDown.all();
+      const now = Math.floor(Date.now() / 1000);
+
+      const items: AuctionListItem[] = await Promise.all(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        allAccounts.map(async (acc: any) => {
+          const [vaultPda] = PublicKey.findProgramAddressSync(
+            [Buffer.from(VAULT_SEED), acc.publicKey.toBuffer()],
+            PROGRAM_ID
+          );
+          const bal = await connection.getBalance(vaultPda);
+          const endTime = acc.account.endTime.toNumber();
+          return {
+            pubkey: acc.publicKey,
+            data: acc.account as CountDownAccount,
+            vaultBalance: bal / LAMPORTS_PER_SOL,
+            timeLeft: Math.max(0, endTime - now),
+          };
+        })
+      );
+
+      // Active first, then by time left desc
+      items.sort((a, b) => {
+        const aActive = "active" in a.data.status;
+        const bActive = "active" in b.data.status;
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+        return b.timeLeft - a.timeLeft;
+      });
+
+      setAuctions(items);
+    } catch (err) {
+      console.error("Failed to fetch auctions:", err);
+    } finally {
+      setLoadingList(false);
+    }
+  }, [connection]);
+
+  // Fetch on mount
+  useEffect(() => {
+    fetchAllAuctions();
+    const interval = setInterval(fetchAllAuctions, 15000);
+    return () => clearInterval(interval);
+  }, [fetchAllAuctions]);
+
+  // Update time left for list items every second
+  useEffect(() => {
+    if (countdownPubkey) return; // don't update when viewing detail
+    const interval = setInterval(() => {
+      setAuctions((prev) =>
+        prev.map((item) => {
+          const now = Math.floor(Date.now() / 1000);
+          const endTime = item.data.endTime.toNumber();
+          return { ...item, timeLeft: Math.max(0, endTime - now) };
+        })
+      );
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [countdownPubkey]);
+
+  // Fetch single countdown detail
   const fetchCountdown = useCallback(async () => {
     if (!countdownPubkey) return;
     try {
-      const dummyWallet = {
-        publicKey: PublicKey.default,
-        signTransaction: async <T,>(t: T) => t,
-        signAllTransactions: async <T,>(t: T) => t,
-      };
-      const readProvider = new AnchorProvider(connection, dummyWallet as never, { commitment: "confirmed" });
-      const readProgram = new Program(idl as never, readProvider);
+      const readProgram = getReadProgram(connection);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = await (readProgram.account as any).countDown.fetch(countdownPubkey) as CountDownAccount;
       setCountdownData(data);
@@ -86,16 +177,6 @@ export default function Home() {
       console.error("Failed to fetch countdown:", err);
     }
   }, [connection, countdownPubkey]);
-
-  const handleSearch = useCallback(async () => {
-    if (!searchKey.trim()) return;
-    try {
-      const pk = new PublicKey(searchKey.trim());
-      setCountdownPubkey(pk);
-    } catch {
-      setTxStatus("INVALID PUBKEY");
-    }
-  }, [searchKey]);
 
   useEffect(() => {
     if (!countdownPubkey) return;
@@ -173,6 +254,19 @@ export default function Home() {
     }
   }, [program, wallet.publicKey, countdownPubkey, fetchCountdown]);
 
+  const selectAuction = (pubkey: PublicKey) => {
+    setCountdownPubkey(pubkey);
+    setCountdownData(null);
+    setTxStatus("");
+  };
+
+  const goBack = () => {
+    setCountdownPubkey(null);
+    setCountdownData(null);
+    setTxStatus("");
+    fetchAllAuctions();
+  };
+
   const time = formatTime(timeLeft);
   const isActive = countdownData && "active" in countdownData.status;
   const isExpired = timeLeft === 0 && countdownData !== null;
@@ -211,40 +305,127 @@ export default function Home() {
         </p>
       </div>
 
-      {/* Search */}
+      {/* ============ AUCTION LIST VIEW ============ */}
       {!countdownPubkey && (
-        <div className="card-degen p-6 md:p-8 w-full mb-6" style={{ borderRadius: 0 }}>
-          <label
-            className="text-[10px] tracking-[0.2em] uppercase block mb-3"
-            style={{ color: "var(--text-dim)" }}
-          >
-            Enter Auction Account Pubkey
-          </label>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <input
-              type="text"
-              value={searchKey}
-              onChange={(e) => setSearchKey(e.target.value)}
-              placeholder="Pubkey..."
-              className="flex-1 px-4 py-3 text-xs text-white focus:outline-none transition-colors"
-              style={{
-                background: "var(--bg-dark)",
-                border: "1px solid var(--border-dim)",
-                fontFamily: "inherit",
-              }}
-              onFocus={(e) => (e.target.style.borderColor = "var(--neon-green)")}
-              onBlur={(e) => (e.target.style.borderColor = "var(--border-dim)")}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            />
-            <button onClick={handleSearch} className="btn-degen px-6 py-3 text-xs">
-              LOAD
-            </button>
-          </div>
-        </div>
+        <>
+          {loadingList ? (
+            <div className="card-degen p-8 w-full text-center" style={{ borderRadius: 0 }}>
+              <div
+                className="text-xs tracking-[0.2em] uppercase"
+                style={{ color: "var(--text-dim)", animation: "flicker 1.5s infinite" }}
+              >
+                Fetching auctions...
+              </div>
+            </div>
+          ) : auctions.length === 0 ? (
+            <div className="card-degen p-8 w-full text-center" style={{ borderRadius: 0 }}>
+              <div className="text-xs tracking-[0.2em] uppercase" style={{ color: "var(--text-dim)" }}>
+                No auctions found
+              </div>
+            </div>
+          ) : (
+            <div className="w-full space-y-[1px]" style={{ background: "var(--border-dim)" }}>
+              {auctions.map((auction) => {
+                const active = "active" in auction.data.status;
+                const ended = auction.timeLeft === 0;
+                return (
+                  <button
+                    key={auction.pubkey.toBase58()}
+                    onClick={() => selectAuction(auction.pubkey)}
+                    className="w-full text-left px-5 py-4 md:px-6 md:py-5 transition-colors cursor-pointer"
+                    style={{ background: "var(--bg-card)" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-card-hover)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-card)")}
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      {/* Left: vault + status */}
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className="w-1 h-10 flex-shrink-0"
+                          style={{
+                            background: !active
+                              ? "var(--text-dim)"
+                              : ended
+                              ? "var(--neon-pink)"
+                              : "var(--neon-green)",
+                            boxShadow: !active
+                              ? "none"
+                              : ended
+                              ? "0 0 8px var(--neon-pink)"
+                              : "0 0 8px var(--neon-green)",
+                          }}
+                        />
+                        <div className="min-w-0">
+                          <div
+                            className="text-lg md:text-xl font-bold"
+                            style={{
+                              color: "var(--neon-green)",
+                              textShadow: "0 0 10px var(--neon-green)",
+                            }}
+                          >
+                            {auction.vaultBalance.toFixed(2)} SOL
+                          </div>
+                          <div className="text-[9px] md:text-[10px] tracking-[0.2em] uppercase" style={{ color: "var(--text-dim)" }}>
+                            {shortenAddress(auction.pubkey.toBase58())}
+                            {" // "}
+                            {auction.data.ticketCounter.toString()} tickets
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: time + status */}
+                      <div className="text-right flex-shrink-0">
+                        {!active ? (
+                          <div
+                            className="text-sm font-bold tracking-wider"
+                            style={{ color: "var(--text-dim)" }}
+                          >
+                            CLAIMED
+                          </div>
+                        ) : ended ? (
+                          <div
+                            className="text-sm font-bold tracking-wider"
+                            style={{ color: "var(--neon-pink)", textShadow: "0 0 8px var(--neon-pink)" }}
+                          >
+                            ENDED
+                          </div>
+                        ) : (
+                          <div
+                            className="text-sm md:text-base font-bold"
+                            style={{
+                              fontVariantNumeric: "tabular-nums",
+                              color: auction.timeLeft <= 60 ? "var(--neon-pink)" : "#fff",
+                              textShadow: auction.timeLeft <= 60 ? "0 0 8px var(--neon-pink)" : "none",
+                            }}
+                          >
+                            {formatTimeShort(auction.timeLeft)}
+                          </div>
+                        )}
+                        <div className="text-[9px] tracking-[0.2em] uppercase mt-0.5" style={{ color: "var(--text-dim)" }}>
+                          {(auction.data.ticketPrice.toNumber() / LAMPORTS_PER_SOL).toFixed(2)} SOL/ticket
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
 
-      {countdownData && (
+      {/* ============ AUCTION DETAIL VIEW ============ */}
+      {countdownPubkey && countdownData && (
         <>
+          {/* Back button */}
+          <button
+            onClick={goBack}
+            className="w-full text-left mb-4 text-xs tracking-[0.15em] uppercase cursor-pointer hover:underline"
+            style={{ color: "var(--neon-green)" }}
+          >
+            {"<"} ALL AUCTIONS
+          </button>
+
           {/* Timer */}
           <div className="card-degen p-6 md:p-10 w-full mb-4 text-center" style={{ borderRadius: 0 }}>
             {isActive && !isExpired ? (
@@ -256,6 +437,12 @@ export default function Home() {
                   {isUrgent ? "// HURRY UP ANON //" : "// TIME REMAINING //"}
                 </div>
                 <div className={`flex items-center justify-center gap-2 md:gap-4 ${isUrgent ? "urgent-timer" : ""}`}>
+                  {Number(time.d) > 0 && (
+                    <>
+                      <TimeBlock value={time.d} label="DAYS" urgent={isUrgent} />
+                      <Separator />
+                    </>
+                  )}
                   <TimeBlock value={time.h} label="HRS" urgent={isUrgent} />
                   <Separator />
                   <TimeBlock value={time.m} label="MIN" urgent={isUrgent} />
@@ -315,7 +502,11 @@ export default function Home() {
                 disabled={loading || !wallet.publicKey}
                 className="btn-degen w-full py-4 md:py-5 text-sm md:text-base tracking-[0.15em]"
               >
-                {loading ? "SENDING TX..." : !wallet.publicKey ? "CONNECT WALLET" : "BUY TICKET"}
+                {loading
+                  ? "SENDING TX..."
+                  : !wallet.publicKey
+                  ? "CONNECT WALLET"
+                  : `BUY TICKET — ${(countdownData.ticketPrice.toNumber() / LAMPORTS_PER_SOL).toFixed(2)} SOL`}
               </button>
             )}
 
@@ -354,19 +545,7 @@ export default function Home() {
           <div className="w-full pt-4 mt-auto" style={{ borderTop: "1px solid var(--border-dim)" }}>
             <div className="flex flex-col sm:flex-row justify-between gap-2 text-[9px] md:text-[10px] tracking-[0.15em] uppercase" style={{ color: "var(--text-dim)" }}>
               <span>Program: {shortenAddress(PROGRAM_ID.toBase58())}</span>
-              <span>Account: {countdownPubkey && shortenAddress(countdownPubkey.toBase58())}</span>
-              <button
-                onClick={() => {
-                  setCountdownPubkey(null);
-                  setCountdownData(null);
-                  setSearchKey("");
-                  setTxStatus("");
-                }}
-                className="cursor-pointer hover:underline"
-                style={{ color: "var(--neon-pink)" }}
-              >
-                [SWITCH]
-              </button>
+              <span>Account: {shortenAddress(countdownPubkey.toBase58())}</span>
             </div>
           </div>
         </>
