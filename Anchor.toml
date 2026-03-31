@@ -1,0 +1,21 @@
+[toolchain]
+package_manager = "yarn"
+solana_version = "2.3.13"
+platform_tools_version = "v1.52"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+count_down = "9x4LbUPs1aKmLFdHbmop1vHyqqyvg8ngnZkjTmT8XNB7"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 \"tests/**/*.ts\""
