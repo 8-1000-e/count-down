@@ -281,14 +281,27 @@ export default function Home() {
     <main className="flex-1 flex flex-col items-center px-4 py-6 md:py-12 max-w-2xl mx-auto w-full">
       {/* Header */}
       <header className="w-full flex items-center justify-between mb-8 md:mb-12">
-        <div className="flex items-center gap-2">
-          <div
-            className="w-2 h-2 rounded-full"
-            style={{ backgroundColor: "var(--neon-green)", boxShadow: "0 0 8px var(--neon-green)" }}
-          />
-          <span className="text-[10px] md:text-xs tracking-[0.2em] uppercase" style={{ color: "var(--text-mid)" }}>
-            Mainnet
-          </span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div
+              className="w-2 h-2 rounded-full"
+              style={{ backgroundColor: "var(--neon-green)", boxShadow: "0 0 8px var(--neon-green)" }}
+            />
+            <span className="text-[10px] md:text-xs tracking-[0.2em] uppercase" style={{ color: "var(--text-mid)" }}>
+              Mainnet
+            </span>
+          </div>
+          <a
+            href="https://x.com/TimeGoesDowm"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="transition-opacity hover:opacity-80"
+            style={{ color: "var(--text-mid)" }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+            </svg>
+          </a>
         </div>
         <WalletMultiButton />
       </header>

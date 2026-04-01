@@ -11,6 +11,8 @@ pub mod count_down {
     pub fn initialize(ctx: Context<Initialize>, init_bid: u64, ticket_price: u64, end_time: i64) -> Result<()> {
         let admin = Pubkey::from_str("69TwH2GJiBSA8Eo3DunPGsXGWjNFY267zRrpHptYWCuC").unwrap();
         require!(ctx.accounts.signer.key() == admin, CustomError::Unauthorized);
+        require!(ticket_price > 0, CustomError::InvalidParams);
+        require!(end_time > Clock::get()?.unix_timestamp, CustomError::InvalidParams);
 
         let count_down = &mut ctx.accounts.count_down;
         count_down.authority = ctx.accounts.signer.key();
@@ -70,9 +72,9 @@ pub mod count_down {
             ticket_price - half,
         )?;
 
-        count_down.end_time += 60;
+        count_down.end_time = count_down.end_time.checked_add(60).ok_or(CustomError::Overflow)?;
         count_down.last_ticket_buyer = ctx.accounts.signer.key();
-        count_down.ticket_counter += 1;
+        count_down.ticket_counter = count_down.ticket_counter.checked_add(1).ok_or(CustomError::Overflow)?;
         Ok(())
     }
 
@@ -94,12 +96,11 @@ pub mod count_down {
         ];
 
         let amount = ctx.accounts.vault.lamports();
-        let receiver = if count_down.ticket_counter > 0 
-        {
+        let receiver = if count_down.ticket_counter > 0 {
             ctx.accounts.winner.to_account_info()
-        } 
-        else 
-        {
+        } else {
+            // No tickets sold — refund to authority
+            require!(ctx.accounts.signer.key() == count_down.authority, CustomError::Unauthorized);
             ctx.accounts.signer.to_account_info()
         };
 
@@ -115,6 +116,11 @@ pub mod count_down {
             amount,
         )?;
 
+        Ok(())
+    }
+
+    pub fn close_auction(ctx: Context<CloseAuction>) -> Result<()> {
+        require!(ctx.accounts.count_down.status == AuctionStatus::Claimed, CustomError::AuctionNotEnded);
         Ok(())
     }
 }
@@ -181,6 +187,20 @@ pub struct ClaimAuction<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+pub struct CloseAuction<'info> {
+    #[account(
+        mut,
+        constraint = signer.key() == count_down.authority @ CustomError::Unauthorized,
+    )]
+    pub signer: Signer<'info>,
+    #[account(
+        mut,
+        close = signer,
+    )]
+    pub count_down: Account<'info, CountDown>,
+}
+
 #[account]
 #[derive(InitSpace)]
 pub struct CountDown {
@@ -211,4 +231,8 @@ pub enum CustomError {
     AuctionNotEnded,
     #[msg("Auction has already been claimed")]
     AuctionAlreadyClaimed,
+    #[msg("Invalid parameters")]
+    InvalidParams,
+    #[msg("Arithmetic overflow")]
+    Overflow,
 }
