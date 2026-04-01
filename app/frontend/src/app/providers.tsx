@@ -11,7 +11,7 @@ import { clusterApiUrl } from "@solana/web3.js";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
 export default function Providers({ children }: { children: React.ReactNode }) {
-  const endpoint = useMemo(() => "https://devnet.helius-rpc.com/?api-key=f9ec4abd-caee-4752-84d6-82d8fcc1705d", []);
+  const endpoint = useMemo(() => `https://mainnet.helius-rpc.com/?api-key=${process.env.NEXT_PUBLIC_HELIUS_API_KEY}`, []);
   const wallets = useMemo(() => [new PhantomWalletAdapter()], []);
 
   return (

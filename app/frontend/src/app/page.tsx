@@ -287,7 +287,7 @@ export default function Home() {
             style={{ backgroundColor: "var(--neon-green)", boxShadow: "0 0 8px var(--neon-green)" }}
           />
           <span className="text-[10px] md:text-xs tracking-[0.2em] uppercase" style={{ color: "var(--text-mid)" }}>
-            Devnet
+            Mainnet
           </span>
         </div>
         <WalletMultiButton />
@@ -319,9 +319,28 @@ export default function Home() {
               </div>
             </div>
           ) : auctions.length === 0 ? (
-            <div className="card-degen p-8 w-full text-center" style={{ borderRadius: 0 }}>
-              <div className="text-xs tracking-[0.2em] uppercase" style={{ color: "var(--text-dim)" }}>
-                No auctions found
+            <div className="card-degen p-12 md:p-16 w-full text-center" style={{ borderRadius: 0 }}>
+              <div
+                className="text-2xl md:text-4xl font-bold mb-3"
+                style={{ color: "var(--neon-purple)", textShadow: "0 0 20px rgba(191,0,255,0.4)" }}
+              >
+                COMING SOON
+              </div>
+              <div className="text-[10px] md:text-xs tracking-[0.3em] uppercase mb-6" style={{ color: "var(--text-dim)" }}>
+                First auction drops any moment now
+              </div>
+              <div className="flex justify-center gap-1">
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{
+                      background: "var(--neon-green)",
+                      boxShadow: "0 0 6px var(--neon-green)",
+                      animation: `flicker 1.5s ${i * 0.3}s infinite`,
+                    }}
+                  />
+                ))}
               </div>
             </div>
           ) : (

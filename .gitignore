@@ -7,3 +7,5 @@ test-ledger
 .yarn
 .next
 app/frontend/scripts/countdown-keypair.json
+.env
+.env.local
