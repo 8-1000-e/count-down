@@ -9,11 +9,13 @@ const WalletMultiButton = dynamic(
   () => import("@solana/wallet-adapter-react-ui").then((m) => m.WalletMultiButton),
   { ssr: false }
 );
-import { PublicKey, LAMPORTS_PER_SOL, SystemProgram } from "@solana/web3.js";
+import { Connection, PublicKey, LAMPORTS_PER_SOL, SystemProgram } from "@solana/web3.js";
 import idl from "../idl/count_down.json";
 
 const PROGRAM_ID = new PublicKey(idl.address);
 const VAULT_SEED = "vault";
+const RPC_MAIN = `https://mainnet.helius-rpc.com/?api-key=${process.env.NEXT_PUBLIC_HELIUS_API_KEY}`;
+const RPC_TURBO = `https://mainnet.helius-rpc.com/?api-key=${process.env.NEXT_PUBLIC_HELIUS_TURBO_KEY}`;
 
 interface CountDownAccount {
   authority: PublicKey;
@@ -63,14 +65,25 @@ function shortenAddress(addr: string): string {
   return addr.slice(0, 4) + "..." + addr.slice(-4);
 }
 
-function getReadProgram(connection: import("@solana/web3.js").Connection) {
+const connMain = new Connection(RPC_MAIN, "confirmed");
+const connTurbo = new Connection(RPC_TURBO, "confirmed");
+
+function getReadProgram(conn: Connection) {
   const dummyWallet = {
     publicKey: PublicKey.default,
     signTransaction: async <T,>(t: T) => t,
     signAllTransactions: async <T,>(t: T) => t,
   };
-  const readProvider = new AnchorProvider(connection, dummyWallet as never, { commitment: "confirmed" });
+  const readProvider = new AnchorProvider(conn, dummyWallet as never, { commitment: "confirmed" });
   return new Program(idl as never, readProvider);
+}
+
+async function fetchWithFallback<T>(fn: (conn: Connection) => Promise<T>): Promise<T> {
+  try {
+    return await fn(connMain);
+  } catch {
+    return await fn(connTurbo);
+  }
 }
 
 function formatSol(sol: number): string {
@@ -107,45 +120,46 @@ export default function Home() {
   // Fetch all countdown accounts
   const fetchAllAuctions = useCallback(async () => {
     try {
-      const readProgram = getReadProgram(connection);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const allAccounts = await (readProgram.account as any).countDown.all();
-      const now = Math.floor(Date.now() / 1000);
-
-      const items: AuctionListItem[] = await Promise.all(
+      await fetchWithFallback(async (conn) => {
+        const readProgram = getReadProgram(conn);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        allAccounts.map(async (acc: any) => {
-          const [vaultPda] = PublicKey.findProgramAddressSync(
-            [Buffer.from(VAULT_SEED), acc.publicKey.toBuffer()],
-            PROGRAM_ID
-          );
-          const bal = await connection.getBalance(vaultPda);
-          const endTime = acc.account.endTime.toNumber();
-          return {
-            pubkey: acc.publicKey,
-            data: acc.account as CountDownAccount,
-            vaultBalance: bal / LAMPORTS_PER_SOL,
-            timeLeft: Math.max(0, endTime - now),
-          };
-        })
-      );
+        const allAccounts = await (readProgram.account as any).countDown.all();
+        const now = Math.floor(Date.now() / 1000);
 
-      // Active first, then by time left desc
-      items.sort((a, b) => {
-        const aActive = "active" in a.data.status;
-        const bActive = "active" in b.data.status;
-        if (aActive && !bActive) return -1;
-        if (!aActive && bActive) return 1;
-        return b.timeLeft - a.timeLeft;
+        const items: AuctionListItem[] = await Promise.all(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          allAccounts.map(async (acc: any) => {
+            const [vaultPda] = PublicKey.findProgramAddressSync(
+              [Buffer.from(VAULT_SEED), acc.publicKey.toBuffer()],
+              PROGRAM_ID
+            );
+            const bal = await conn.getBalance(vaultPda);
+            const endTime = acc.account.endTime.toNumber();
+            return {
+              pubkey: acc.publicKey,
+              data: acc.account as CountDownAccount,
+              vaultBalance: bal / LAMPORTS_PER_SOL,
+              timeLeft: Math.max(0, endTime - now),
+            };
+          })
+        );
+
+        items.sort((a, b) => {
+          const aActive = "active" in a.data.status;
+          const bActive = "active" in b.data.status;
+          if (aActive && !bActive) return -1;
+          if (!aActive && bActive) return 1;
+          return b.timeLeft - a.timeLeft;
+        });
+
+        setAuctions(items);
       });
-
-      setAuctions(items);
     } catch (err) {
       console.error("Failed to fetch auctions:", err);
     } finally {
       setLoadingList(false);
     }
-  }, [connection]);
+  }, []);
 
   // Fetch on mount
   useEffect(() => {
@@ -169,11 +183,12 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [countdownPubkey]);
 
-  // Fetch single countdown detail
-  const fetchCountdown = useCallback(async () => {
+  // Fetch single countdown detail — uses turbo key when < 1 min
+  const fetchCountdown = useCallback(async (turbo = false) => {
     if (!countdownPubkey) return;
-    try {
-      const readProgram = getReadProgram(connection);
+    const conn = turbo ? connTurbo : connMain;
+    const doFetch = async (c: Connection) => {
+      const readProgram = getReadProgram(c);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = await (readProgram.account as any).countDown.fetch(countdownPubkey) as CountDownAccount;
       setCountdownData(data);
@@ -182,19 +197,34 @@ export default function Home() {
         [Buffer.from(VAULT_SEED), countdownPubkey.toBuffer()],
         PROGRAM_ID
       );
-      const bal = await connection.getBalance(vaultPda);
+      const bal = await c.getBalance(vaultPda);
       setVaultBalance(bal / LAMPORTS_PER_SOL);
-    } catch (err) {
-      console.error("Failed to fetch countdown:", err);
+    };
+    try {
+      await doFetch(conn);
+    } catch {
+      try { await doFetch(turbo ? connMain : connTurbo); } catch (err) {
+        console.error("Failed to fetch countdown:", err);
+      }
     }
-  }, [connection, countdownPubkey]);
+  }, [countdownPubkey]);
 
+  // Normal polling: 5s. When < 1 min: 200ms on turbo key
   useEffect(() => {
     if (!countdownPubkey) return;
     fetchCountdown();
-    const interval = setInterval(fetchCountdown, 5000);
+    const interval = setInterval(() => fetchCountdown(), 5000);
     return () => clearInterval(interval);
   }, [countdownPubkey, fetchCountdown]);
+
+  // Turbo polling when < 1 min
+  useEffect(() => {
+    if (!countdownPubkey || !countdownData) return;
+    const isUrgentNow = timeLeft > 0 && timeLeft <= 60;
+    if (!isUrgentNow) return;
+    const turboInterval = setInterval(() => fetchCountdown(true), 200);
+    return () => clearInterval(turboInterval);
+  }, [countdownPubkey, countdownData, timeLeft, fetchCountdown]);
 
   useEffect(() => {
     if (!countdownData) return;
