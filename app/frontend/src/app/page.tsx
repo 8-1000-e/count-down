@@ -1,9 +1,14 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { Program, AnchorProvider, BN } from "@coral-xyz/anchor";
+
+const WalletMultiButton = dynamic(
+  () => import("@solana/wallet-adapter-react-ui").then((m) => m.WalletMultiButton),
+  { ssr: false }
+);
 import { PublicKey, LAMPORTS_PER_SOL, SystemProgram } from "@solana/web3.js";
 import idl from "../idl/count_down.json";
 
@@ -66,6 +71,12 @@ function getReadProgram(connection: import("@solana/web3.js").Connection) {
   };
   const readProvider = new AnchorProvider(connection, dummyWallet as never, { commitment: "confirmed" });
   return new Program(idl as never, readProvider);
+}
+
+function formatSol(sol: number): string {
+  if (sol >= 1) return sol.toFixed(2);
+  if (sol >= 0.01) return sol.toFixed(4);
+  return sol.toFixed(6);
 }
 
 export default function Home() {
@@ -332,29 +343,46 @@ export default function Home() {
               </div>
             </div>
           ) : auctions.length === 0 ? (
-            <div className="card-degen p-12 md:p-16 w-full text-center" style={{ borderRadius: 0 }}>
-              <div
-                className="text-2xl md:text-4xl font-bold mb-3"
-                style={{ color: "var(--neon-purple)", textShadow: "0 0 20px rgba(191,0,255,0.4)" }}
-              >
-                COMING SOON
-              </div>
-              <div className="text-[10px] md:text-xs tracking-[0.3em] uppercase mb-6" style={{ color: "var(--text-dim)" }}>
-                First auction drops any moment now
-              </div>
-              <div className="flex justify-center gap-1">
-                {[0, 1, 2].map((i) => (
-                  <div
+            <div className="w-full flex flex-col items-center py-20 md:py-32">
+              {/* Big countdown-style zeros */}
+              <div className="flex items-center gap-2 md:gap-4 mb-8">
+                {["00", ":", "00", ":", "00"].map((val, i) => (
+                  <span
                     key={i}
-                    className="w-1.5 h-1.5 rounded-full"
+                    className={val === ":" ? "text-3xl md:text-5xl" : "text-5xl md:text-7xl lg:text-8xl font-bold"}
                     style={{
-                      background: "var(--neon-green)",
-                      boxShadow: "0 0 6px var(--neon-green)",
-                      animation: `flicker 1.5s ${i * 0.3}s infinite`,
+                      color: val === ":" ? "var(--border-dim)" : "var(--border-dim)",
+                      fontVariantNumeric: "tabular-nums",
+                      lineHeight: 1,
                     }}
-                  />
+                  >
+                    {val}
+                  </span>
                 ))}
               </div>
+
+              <div
+                className="text-sm md:text-base tracking-[0.3em] uppercase mb-2"
+                style={{ color: "#fff" }}
+              >
+                Coming soon
+              </div>
+
+              <div className="text-[10px] md:text-xs tracking-[0.2em] uppercase mb-10" style={{ color: "var(--text-dim)" }}>
+                No active auctions yet
+              </div>
+
+              <a
+                href="https://x.com/TimeGoesDowm"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-degen flex items-center gap-2.5 px-6 py-3 text-xs tracking-[0.15em]"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                </svg>
+                Follow @TimeGoesDowm
+              </a>
             </div>
           ) : (
             <div className="w-full space-y-3 md:space-y-4">
@@ -400,7 +428,7 @@ export default function Home() {
                               lineHeight: 1,
                             }}
                           >
-                            {auction.vaultBalance.toFixed(2)}
+                            {formatSol(auction.vaultBalance)}
                           </span>
                           <span className="text-sm font-bold" style={{ color: "var(--text-mid)" }}>SOL</span>
                         </div>
@@ -426,7 +454,7 @@ export default function Home() {
                             {auction.data.ticketCounter.toString()} tickets sold
                           </span>
                           <span>
-                            {(auction.data.ticketPrice.toNumber() / LAMPORTS_PER_SOL).toFixed(2)} SOL/ticket
+                            {formatSol(auction.data.ticketPrice.toNumber() / LAMPORTS_PER_SOL)} SOL/ticket
                           </span>
                         </div>
                         <span>
@@ -523,7 +551,7 @@ export default function Home() {
                         lineHeight: 1,
                       }}
                     >
-                      {vaultBalance.toFixed(2)}
+                      {formatSol(vaultBalance)}
                     </span>
                     <span className="text-lg md:text-xl font-bold" style={{ color: "var(--text-mid)" }}>SOL</span>
                   </div>
@@ -536,7 +564,7 @@ export default function Home() {
                     {countdownData.ticketCounter.toString()}
                   </div>
                   <div className="text-[9px] tracking-[0.3em] uppercase mt-1" style={{ color: "var(--text-dim)" }}>
-                    tickets
+                    tickets sold
                   </div>
                 </div>
               </div>
@@ -547,13 +575,10 @@ export default function Home() {
             >
               <div className="flex items-center gap-2">
                 <div className="w-[6px] h-[6px] rounded-full" style={{ background: isWinner ? "var(--neon-green)" : "var(--neon-pink)", boxShadow: isWinner ? "0 0 6px var(--neon-green)" : "0 0 6px var(--neon-pink)" }} />
-                <span className="text-[10px] md:text-xs tracking-[0.15em] uppercase" style={{ color: isWinner ? "var(--neon-green)" : "var(--neon-pink)" }}>
-                  {isWinner ? "YOU ARE LAST BUYER" : shortenAddress(countdownData.lastTicketBuyer.toBase58())}
+                <span className="text-[10px] md:text-xs tracking-[0.15em] uppercase" style={{ color: isWinner ? "var(--neon-green)" : "var(--text-mid)" }}>
+                  {isWinner ? "YOU ARE LAST BUYER" : `Last buyer: ${shortenAddress(countdownData.lastTicketBuyer.toBase58())}`}
                 </span>
               </div>
-              <span className="text-[10px] md:text-xs tracking-[0.15em]" style={{ color: "var(--neon-cyan)", textShadow: "0 0 6px rgba(0,255,247,0.3)" }}>
-                {(countdownData.ticketPrice.toNumber() / LAMPORTS_PER_SOL).toFixed(2)} SOL/ticket
-              </span>
             </div>
           </div>
 
@@ -570,10 +595,13 @@ export default function Home() {
                     ? "SENDING TX..."
                     : !wallet.publicKey
                     ? "CONNECT WALLET"
-                    : `BUY TICKET — ${(countdownData.ticketPrice.toNumber() / LAMPORTS_PER_SOL).toFixed(2)} SOL`}
+                    : `BUY TICKET — ${formatSol(countdownData.ticketPrice.toNumber() / LAMPORTS_PER_SOL)} SOL`}
                 </button>
-                <div className="text-center mt-2 text-[9px] md:text-[10px] tracking-[0.2em] uppercase" style={{ color: "var(--text-dim)" }}>
-                  Each ticket adds <span style={{ color: "var(--neon-cyan)", textShadow: "0 0 4px rgba(0,255,247,0.3)" }}>+60s</span> to the timer
+                <div
+                  className="text-center mt-2 text-[10px] md:text-xs tracking-[0.2em] uppercase"
+                  style={{ color: "var(--text-mid)" }}
+                >
+                  Each ticket adds <span style={{ color: "var(--neon-cyan)" }}>+60s</span> to the timer
                 </div>
               </div>
             )}

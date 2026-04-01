@@ -61,6 +61,11 @@ body::after {
   z-index: 9999;
 }
 
+@keyframes pulse-ring {
+  0% { transform: scale(0.5); opacity: 0.6; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
 /* Glitch keyframes */
 @keyframes glitch-1 {
   0%, 100% { clip-path: inset(0 0 95% 0); transform: translate(-2px, 0); }

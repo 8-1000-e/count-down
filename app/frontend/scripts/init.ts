@@ -4,9 +4,9 @@ import * as fs from "fs";
 import * as path from "path";
 
 // ---- CONFIG ----
-const INIT_BID = 3 * LAMPORTS_PER_SOL;           // 3 SOL initial pot
-const TICKET_PRICE = 0.1 * LAMPORTS_PER_SOL;    // 0.1 SOL per ticket
-const DURATION_SECONDS = 2 * 24 * 60 * 60;       // 2 days
+const INIT_BID = 0.01 * LAMPORTS_PER_SOL;        // 0.01 SOL initial pot
+const TICKET_PRICE = 0.001 * LAMPORTS_PER_SOL;   // 0.001 SOL per ticket
+const DURATION_SECONDS = 120;                      // 2 min
 // ----------------
 
 async function main() {
@@ -17,8 +17,8 @@ async function main() {
   const payer = Keypair.fromSecretKey(Uint8Array.from(secret));
   console.log("Payer:", payer.publicKey.toBase58());
 
-  // Connect to devnet
-  const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
+  // Connect to mainnet
+  const connection = new Connection("https://mainnet.helius-rpc.com/?api-key=f9ec4abd-caee-4752-84d6-82d8fcc1705d", "confirmed");
   const balance = await connection.getBalance(payer.publicKey);
   console.log("Balance:", balance / LAMPORTS_PER_SOL, "SOL");
 
