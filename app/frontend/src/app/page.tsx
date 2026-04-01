@@ -227,7 +227,7 @@ export default function Home() {
   }, [program, wallet.publicKey, countdownPubkey, countdownData, fetchCountdown]);
 
   const claimAuction = useCallback(async () => {
-    if (!program || !wallet.publicKey || !countdownPubkey) return;
+    if (!program || !wallet.publicKey || !countdownPubkey || !countdownData) return;
     setLoading(true);
     setTxStatus("");
     try {
@@ -241,6 +241,7 @@ export default function Home() {
           signer: wallet.publicKey,
           countDown: countdownPubkey,
           vault: vaultPda,
+          winner: countdownData.lastTicketBuyer,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -252,7 +253,7 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [program, wallet.publicKey, countdownPubkey, fetchCountdown]);
+  }, [program, wallet.publicKey, countdownPubkey, countdownData, fetchCountdown]);
 
   const selectAuction = (pubkey: PublicKey) => {
     setCountdownPubkey(pubkey);
@@ -387,18 +388,18 @@ export default function Home() {
                       </div>
 
                       {/* Bottom row: meta info */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4 text-[9px] md:text-[10px] tracking-[0.2em] uppercase" style={{ color: "var(--text-dim)" }}>
+                      <div className="flex items-center justify-between text-[9px] md:text-[10px] tracking-[0.2em] uppercase" style={{ color: "var(--text-dim)" }}>
+                        <div className="flex items-center gap-4">
                           <span style={{ color: "var(--neon-purple)", textShadow: "0 0 6px rgba(191,0,255,0.3)" }}>
-                            {auction.data.ticketCounter.toString()} tickets
+                            {auction.data.ticketCounter.toString()} tickets sold
                           </span>
                           <span>
                             {(auction.data.ticketPrice.toNumber() / LAMPORTS_PER_SOL).toFixed(2)} SOL/ticket
                           </span>
                         </div>
-                        <div className="text-[9px] md:text-[10px] tracking-[0.15em] uppercase" style={{ color: "var(--text-dim)" }}>
-                          {shortenAddress(auction.pubkey.toBase58())}
-                        </div>
+                        <span>
+                          Last owner: <span style={{ color: "var(--neon-pink)" }}>{shortenAddress(auction.data.lastTicketBuyer.toBase58())}</span>
+                        </span>
                       </div>
                     </div>
                   </button>

@@ -94,13 +94,21 @@ pub mod count_down {
         ];
 
         let amount = ctx.accounts.vault.lamports();
+        let receiver = if count_down.ticket_counter > 0 
+        {
+            ctx.accounts.winner.to_account_info()
+        } 
+        else 
+        {
+            ctx.accounts.signer.to_account_info()
+        };
 
         system_program::transfer(
             CpiContext::new_with_signer(
                 ctx.accounts.system_program.to_account_info(),
                 system_program::Transfer {
                     from: ctx.accounts.vault.to_account_info(),
-                    to: ctx.accounts.signer.to_account_info(),
+                    to: receiver,
                 },
                 &[seeds],
             ),
@@ -154,10 +162,7 @@ pub struct BuyTicket<'info> {
 
 #[derive(Accounts)]
 pub struct ClaimAuction<'info> {
-    #[account(
-        mut,
-        constraint = signer.key() == count_down.last_ticket_buyer @ CustomError::Unauthorized,
-    )]
+    #[account(mut)]
     pub signer: Signer<'info>,
     #[account(mut)]
     pub count_down: Account<'info, CountDown>,
@@ -167,6 +172,12 @@ pub struct ClaimAuction<'info> {
         bump = count_down.vault_bump,
     )]
     pub vault: SystemAccount<'info>,
+    /// CHECK: must match last_ticket_buyer
+    #[account(
+        mut,
+        constraint = winner.key() == count_down.last_ticket_buyer @ CustomError::Unauthorized,
+    )]
+    pub winner: SystemAccount<'info>,
     pub system_program: Program<'info, System>,
 }
 
