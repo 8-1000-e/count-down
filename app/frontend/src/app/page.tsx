@@ -324,85 +324,80 @@ export default function Home() {
               </div>
             </div>
           ) : (
-            <div className="w-full space-y-[1px]" style={{ background: "var(--border-dim)" }}>
+            <div className="w-full space-y-3 md:space-y-4">
               {auctions.map((auction) => {
                 const active = "active" in auction.data.status;
                 const ended = auction.timeLeft === 0;
+                const statusColor = !active
+                  ? "var(--text-dim)"
+                  : ended
+                  ? "var(--neon-pink)"
+                  : "var(--neon-green)";
+
                 return (
                   <button
                     key={auction.pubkey.toBase58()}
                     onClick={() => selectAuction(auction.pubkey)}
-                    className="w-full text-left px-5 py-4 md:px-6 md:py-5 transition-colors cursor-pointer"
-                    style={{ background: "var(--bg-card)" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-card-hover)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-card)")}
+                    className="w-full text-left cursor-pointer transition-all group relative overflow-hidden"
+                    style={{
+                      background: "var(--bg-card)",
+                      border: "1px solid var(--border-dim)",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = statusColor;
+                      e.currentTarget.style.boxShadow = `0 0 20px ${statusColor}22, inset 0 0 30px ${statusColor}08`;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = "var(--border-dim)";
+                      e.currentTarget.style.boxShadow = "none";
+                    }}
                   >
-                    <div className="flex items-center justify-between gap-4">
-                      {/* Left: vault + status */}
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div
-                          className="w-1 h-10 flex-shrink-0"
-                          style={{
-                            background: !active
-                              ? "var(--text-dim)"
-                              : ended
-                              ? "var(--neon-pink)"
-                              : "var(--neon-green)",
-                            boxShadow: !active
-                              ? "none"
-                              : ended
-                              ? "0 0 8px var(--neon-pink)"
-                              : "0 0 8px var(--neon-green)",
-                          }}
-                        />
-                        <div className="min-w-0">
-                          <div
-                            className="text-lg md:text-xl font-bold"
+                    {/* Top glow bar */}
+                    <div className="h-[2px] w-full" style={{ background: `linear-gradient(90deg, transparent, ${statusColor}, transparent)`, opacity: active ? 1 : 0.3 }} />
+
+                    <div className="p-5 md:p-6">
+                      {/* Top row: vault amount + status badge */}
+                      <div className="flex items-start justify-between gap-4 mb-3">
+                        <div className="flex items-baseline gap-2">
+                          <span
+                            className="text-2xl md:text-3xl font-bold"
                             style={{
-                              color: "var(--neon-green)",
-                              textShadow: "0 0 10px var(--neon-green)",
+                              color: active ? "var(--neon-green)" : "var(--text-dim)",
+                              textShadow: active ? "0 0 20px rgba(57,255,20,0.3)" : "none",
+                              lineHeight: 1,
                             }}
                           >
-                            {auction.vaultBalance.toFixed(2)} SOL
-                          </div>
-                          <div className="text-[9px] md:text-[10px] tracking-[0.2em] uppercase" style={{ color: "var(--text-dim)" }}>
-                            {shortenAddress(auction.pubkey.toBase58())}
-                            {" // "}
-                            {auction.data.ticketCounter.toString()} tickets
-                          </div>
+                            {auction.vaultBalance.toFixed(2)}
+                          </span>
+                          <span className="text-sm font-bold" style={{ color: "var(--text-mid)" }}>SOL</span>
+                        </div>
+
+                        {/* Status badge */}
+                        <div
+                          className="px-3 py-1 text-[10px] md:text-xs font-bold tracking-[0.15em] uppercase flex-shrink-0"
+                          style={{
+                            border: `1px solid ${statusColor}`,
+                            color: statusColor,
+                            background: `${statusColor}0a`,
+                            textShadow: active && !ended ? `0 0 8px ${statusColor}` : "none",
+                          }}
+                        >
+                          {!active ? "CLAIMED" : ended ? "ENDED" : formatTimeShort(auction.timeLeft)}
                         </div>
                       </div>
 
-                      {/* Right: time + status */}
-                      <div className="text-right flex-shrink-0">
-                        {!active ? (
-                          <div
-                            className="text-sm font-bold tracking-wider"
-                            style={{ color: "var(--text-dim)" }}
-                          >
-                            CLAIMED
-                          </div>
-                        ) : ended ? (
-                          <div
-                            className="text-sm font-bold tracking-wider"
-                            style={{ color: "var(--neon-pink)", textShadow: "0 0 8px var(--neon-pink)" }}
-                          >
-                            ENDED
-                          </div>
-                        ) : (
-                          <div
-                            className="text-sm md:text-base font-bold"
-                            style={{
-                              fontVariantNumeric: "tabular-nums",
-                              color: auction.timeLeft <= 60 ? "var(--neon-pink)" : "#fff",
-                              textShadow: auction.timeLeft <= 60 ? "0 0 8px var(--neon-pink)" : "none",
-                            }}
-                          >
-                            {formatTimeShort(auction.timeLeft)}
-                          </div>
-                        )}
-                        <div className="text-[9px] tracking-[0.2em] uppercase mt-0.5" style={{ color: "var(--text-dim)" }}>
-                          {(auction.data.ticketPrice.toNumber() / LAMPORTS_PER_SOL).toFixed(2)} SOL/ticket
+                      {/* Bottom row: meta info */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4 text-[9px] md:text-[10px] tracking-[0.2em] uppercase" style={{ color: "var(--text-dim)" }}>
+                          <span style={{ color: "var(--neon-purple)", textShadow: "0 0 6px rgba(191,0,255,0.3)" }}>
+                            {auction.data.ticketCounter.toString()} tickets
+                          </span>
+                          <span>
+                            {(auction.data.ticketPrice.toNumber() / LAMPORTS_PER_SOL).toFixed(2)} SOL/ticket
+                          </span>
+                        </div>
+                        <div className="text-[9px] md:text-[10px] tracking-[0.15em] uppercase" style={{ color: "var(--text-dim)" }}>
+                          {shortenAddress(auction.pubkey.toBase58())}
                         </div>
                       </div>
                     </div>
@@ -477,37 +472,77 @@ export default function Home() {
             )}
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-2 gap-3 md:gap-4 w-full mb-4">
-            <StatCard label="Vault" value={`${vaultBalance.toFixed(4)} SOL`} color="green" />
-            <StatCard label="Tickets Sold" value={countdownData.ticketCounter.toString()} color="purple" />
-            <StatCard
-              label="Ticket Price"
-              value={`${(countdownData.ticketPrice.toNumber() / LAMPORTS_PER_SOL).toFixed(4)} SOL`}
-              color="cyan"
-            />
-            <StatCard
-              label="Last Buyer"
-              value={shortenAddress(countdownData.lastTicketBuyer.toBase58())}
-              color={isWinner ? "green" : "pink"}
-              highlight={!!isWinner}
-            />
+          {/* Vault hero */}
+          <div className="w-full mb-3 relative overflow-hidden" style={{ background: "var(--bg-card)", border: "1px solid var(--border-dim)" }}>
+            <div className="h-[2px] w-full" style={{ background: "linear-gradient(90deg, transparent, var(--neon-green), transparent)", animation: "border-flow 3s linear infinite", backgroundSize: "200% 100%" }} />
+            <div className="p-6 md:p-8">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <div className="text-[9px] tracking-[0.4em] uppercase mb-1" style={{ color: "var(--text-dim)" }}>
+                    Total Vault
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span
+                      className="text-5xl md:text-6xl lg:text-7xl font-bold"
+                      style={{
+                        color: "var(--neon-green)",
+                        textShadow: "0 0 30px rgba(57,255,20,0.4), 0 0 60px rgba(57,255,20,0.15)",
+                        lineHeight: 1,
+                      }}
+                    >
+                      {vaultBalance.toFixed(2)}
+                    </span>
+                    <span className="text-lg md:text-xl font-bold" style={{ color: "var(--text-mid)" }}>SOL</span>
+                  </div>
+                </div>
+                <div className="text-right pb-1">
+                  <div
+                    className="text-3xl md:text-4xl font-bold"
+                    style={{ color: "var(--neon-purple)", textShadow: "0 0 15px rgba(191,0,255,0.4)", lineHeight: 1 }}
+                  >
+                    {countdownData.ticketCounter.toString()}
+                  </div>
+                  <div className="text-[9px] tracking-[0.3em] uppercase mt-1" style={{ color: "var(--text-dim)" }}>
+                    tickets
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div
+              className="flex items-center justify-between px-6 md:px-8 py-3"
+              style={{ borderTop: "1px solid var(--border-dim)", background: "rgba(255,255,255,0.01)" }}
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-[6px] h-[6px] rounded-full" style={{ background: isWinner ? "var(--neon-green)" : "var(--neon-pink)", boxShadow: isWinner ? "0 0 6px var(--neon-green)" : "0 0 6px var(--neon-pink)" }} />
+                <span className="text-[10px] md:text-xs tracking-[0.15em] uppercase" style={{ color: isWinner ? "var(--neon-green)" : "var(--neon-pink)" }}>
+                  {isWinner ? "YOU ARE LAST BUYER" : shortenAddress(countdownData.lastTicketBuyer.toBase58())}
+                </span>
+              </div>
+              <span className="text-[10px] md:text-xs tracking-[0.15em]" style={{ color: "var(--neon-cyan)", textShadow: "0 0 6px rgba(0,255,247,0.3)" }}>
+                {(countdownData.ticketPrice.toNumber() / LAMPORTS_PER_SOL).toFixed(2)} SOL/ticket
+              </span>
+            </div>
           </div>
 
           {/* Actions */}
           <div className="w-full space-y-3 mb-6">
             {isActive && !isExpired && (
-              <button
-                onClick={buyTicket}
-                disabled={loading || !wallet.publicKey}
-                className="btn-degen w-full py-4 md:py-5 text-sm md:text-base tracking-[0.15em]"
-              >
-                {loading
-                  ? "SENDING TX..."
-                  : !wallet.publicKey
-                  ? "CONNECT WALLET"
-                  : `BUY TICKET — ${(countdownData.ticketPrice.toNumber() / LAMPORTS_PER_SOL).toFixed(2)} SOL`}
-              </button>
+              <div>
+                <button
+                  onClick={buyTicket}
+                  disabled={loading || !wallet.publicKey}
+                  className="btn-degen w-full py-4 md:py-5 text-sm md:text-base tracking-[0.15em]"
+                >
+                  {loading
+                    ? "SENDING TX..."
+                    : !wallet.publicKey
+                    ? "CONNECT WALLET"
+                    : `BUY TICKET — ${(countdownData.ticketPrice.toNumber() / LAMPORTS_PER_SOL).toFixed(2)} SOL`}
+                </button>
+                <div className="text-center mt-2 text-[9px] md:text-[10px] tracking-[0.2em] uppercase" style={{ color: "var(--text-dim)" }}>
+                  Each ticket adds <span style={{ color: "var(--neon-cyan)", textShadow: "0 0 4px rgba(0,255,247,0.3)" }}>+60s</span> to the timer
+                </div>
+              </div>
             )}
 
             {isActive && isExpired && isWinner && (
@@ -599,42 +634,3 @@ function Separator() {
   );
 }
 
-function StatCard({
-  label,
-  value,
-  color,
-  highlight,
-}: {
-  label: string;
-  value: string;
-  color: "green" | "purple" | "cyan" | "pink";
-  highlight?: boolean;
-}) {
-  const colorMap = {
-    green: "var(--neon-green)",
-    purple: "var(--neon-purple)",
-    cyan: "var(--neon-cyan)",
-    pink: "var(--neon-pink)",
-  };
-  const c = colorMap[color];
-
-  return (
-    <div
-      className={`card-degen p-4 md:p-5 ${highlight ? "neon-border" : ""}`}
-      style={{
-        borderRadius: 0,
-        animation: highlight ? "float 3s ease-in-out infinite" : undefined,
-      }}
-    >
-      <div className="text-[9px] md:text-[10px] tracking-[0.25em] uppercase mb-2" style={{ color: "var(--text-dim)" }}>
-        {label}
-      </div>
-      <div
-        className="text-sm md:text-lg font-bold truncate"
-        style={{ color: c, textShadow: `0 0 8px ${c}` }}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
